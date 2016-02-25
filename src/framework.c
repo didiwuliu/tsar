@@ -21,7 +21,7 @@
 
 
 void
-register_mod_fileds(struct module *mod, const char *opt, const char *usage,
+register_mod_fields(struct module *mod, const char *opt, const char *usage,
     struct mod_info *info, int n_col, void *data_collect, void *set_st_record)
 {
     sprintf(mod->opt_line, "%s", opt);
@@ -155,7 +155,8 @@ reload_check_modules()
              || !strcmp(mod->name, "mod_io")
              || !strcmp(mod->name, "mod_tcp")
              || !strcmp(mod->name, "mod_traffic")
-             || !strcmp(mod->name, "mod_nginx"))
+             || !strcmp(mod->name, "mod_nginx")
+             || !strcmp(mod->name, "mod_swap"))
         {
             mod->enable = 1;
 
@@ -368,7 +369,7 @@ collect_record_stat()
                     ret = merge_mult_item_to_array(mod->cur_array, mod);
 
                 } else {
-                    char item[LEN_128] = {0};
+                    char item[LEN_1M] = {0};
                     int num = 0;
                     int pos = 0;
 

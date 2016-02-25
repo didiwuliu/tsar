@@ -44,7 +44,7 @@ convert_record_to_array(U_64 *array, int l_array, const char *record)
 {
     int     i = 0;
     char   *token;
-    char    n_str[LEN_10240] = {0};
+    char    n_str[LEN_1M] = {0};
 
     if (!record || !strlen(record)) {
         return 0;
@@ -115,6 +115,9 @@ strtok_next_item(char item[], char *record, int *start)
     if (!s_token) {
         return 0;
     }
+    if (e_token < s_token) {
+        return 0;
+    }
 
     memcpy(item, s_token + sizeof(ITEM_SPSTART) - 1, e_token - s_token - 1);
     *start = e_token - record + sizeof(ITEM_SPLIT);
@@ -127,7 +130,7 @@ merge_mult_item_to_array(U_64 *array, struct module *mod)
 {
     int    pos = 0;
     int    n_item = 1;
-    char   item[LEN_128] = {0};
+    char   item[LEN_1M] = {0};
 
     memset(array, 0, sizeof(U_64) * mod->n_col);
     while (strtok_next_item(item, mod->record, &pos)) {
@@ -145,7 +148,7 @@ int
 get_strtok_num(const char *str, const char *split)
 {
     int    num = 0;
-    char  *token, n_str[LEN_10240] = {0};
+    char  *token, n_str[LEN_1M] = {0};
 
     if (!str || !strlen(str)) {
         return 0;
@@ -201,14 +204,14 @@ get_mod_hdr(char hdr[], const struct module *mod)
 int
 get_st_array_from_file(int have_collect)
 {
-    int    i, ret = 0;
-    char   pre_line[LEN_40960] = {0};
-    char   line[LEN_40960] = {0};
-    char   detail[LEN_1024] = {0};
-    char   pre_time[32] = {0};
-    char  *s_token;
-    FILE  *fp;
-    struct module *mod;
+    int         i, ret = 0;
+    char        detail[LEN_1M] = {0};
+    char        pre_time[32] = {0};
+    char       *s_token;
+    FILE       *fp;
+    struct      module *mod;
+    static char pre_line[LEN_10M] = {0};
+    static char line[LEN_10M] = {0};
 
     if (!have_collect) {
         collect_record(0);
@@ -234,14 +237,17 @@ get_st_array_from_file(int have_collect)
 
     /* if fopen PRE_RECORD_FILE sucess then store data to pre_record */
     if ((fp = fopen(PRE_RECORD_FILE, "r"))) {
-        if (!fgets(pre_line, LEN_40960, fp)) {
+        if (!fgets(pre_line, LEN_10M, fp)) {
             if (fclose(fp) < 0) {
                 do_debug(LOG_FATAL, "fclose error:%s", strerror(errno));
             }
             ret = -1;
             goto out;
+        } else {
+             if (fclose(fp) < 0) {
+                do_debug(LOG_FATAL, "fclose error:%s", strerror(errno));
+            }
         }
-
     } else {
         ret = -1;
         goto out;
@@ -255,6 +261,7 @@ get_st_array_from_file(int have_collect)
     }
     memcpy(pre_time, pre_line, s_token - pre_line);
     if (!(conf.print_interval = statis.cur_time - atol(pre_time))) {
+        ret = -1;
         goto out;
     }
 

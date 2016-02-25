@@ -14,7 +14,7 @@
 
 char *io_usage = "    --io                Linux I/O performance";
 
-#define MAX_PARTITIONS 32
+#define MAX_PARTITIONS 64
 #define IO_FILE "/proc/diskstats"
 
 struct part_info {
@@ -238,12 +238,12 @@ void
 print_partition_stats(struct module *mod)
 {
     int pos = 0;
-    char buf[LEN_10240];
-    memset(buf, 0, LEN_10240);
+    char buf[LEN_1M];
+    memset(buf, 0, LEN_1M);
     unsigned int p;
 
     for (p = 0; p < n_partitions; p++) {
-        pos += snprintf(buf + pos, LEN_10240 - pos, "%s=%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%d" ITEM_SPLIT,
+        pos += snprintf(buf + pos, LEN_1M - pos, "%s=%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%llu,%d" ITEM_SPLIT,
                 partition[p].name,
                 new_blkio[p].rd_ios,
                 new_blkio[p].rd_merges,
@@ -256,7 +256,7 @@ print_partition_stats(struct module *mod)
                 new_blkio[p].ticks,
                 new_blkio[p].aveq,
                 pos);
-        if (strlen(buf) == LEN_10240 - 1) {
+        if (strlen(buf) == LEN_1M - 1) {
             fclose(iofp);
             return;
         }
@@ -291,10 +291,13 @@ static void
 set_io_record(struct module *mod, double st_array[],
     U_64 pre_array[], U_64 cur_array[], int inter)
 {
-    int i;
+    int i, j;
     for(i = 0; i < 11; i++){
         if(cur_array[i] < pre_array[i]){
-            pre_array[i] = cur_array[i];
+            for(j = 0; j < 11; j++){
+                st_array[j] = -1;
+            }
+            return;
         }
     }
     unsigned long long rd_ios = cur_array[0] - pre_array[0];
@@ -328,5 +331,5 @@ set_io_record(struct module *mod, double st_array[],
 void
 mod_register(struct module *mod)
 {
-    register_mod_fileds(mod, "--io", io_usage, io_info, 11, read_io_stat, set_io_record);
+    register_mod_fields(mod, "--io", io_usage, io_info, 11, read_io_stat, set_io_record);
 }

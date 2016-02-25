@@ -51,9 +51,9 @@ void
 print_header()
 {
     int    i;
-    char   header[LEN_10240] = {0};
-    char   opt_line[LEN_10240] = {0};
-    char   hdr_line[LEN_10240] = {0};
+    char   header[LEN_1M] = {0};
+    char   opt_line[LEN_1M] = {0};
+    char   hdr_line[LEN_1M] = {0};
     char   opt[LEN_128] = {0};
     char   n_opt[LEN_256] = {0};
     char   mod_hdr[LEN_256] = {0};
@@ -84,6 +84,7 @@ print_header()
             /* set print opt line */
             token = strtok(n_record, ITEM_SPLIT);
             int count = 0;
+            mod->p_item = -1;
             while (token) {
                 s_token = strstr(token, ITEM_SPSTART);
                 if (s_token) {
@@ -95,7 +96,7 @@ print_header()
                         count++;
                         continue;
                     }
-                    mod->p_item |= (1<<count);
+                    mod->p_item = count++;
                     adjust_print_opt_line(n_opt, opt, strlen(mod_hdr));
                     strcat(opt_line, n_opt);
                     strcat(opt_line, PRINT_SEC_SPLIT);
@@ -103,7 +104,6 @@ print_header()
                     strcat(hdr_line, PRINT_SEC_SPLIT);
                 }
                 token = strtok(NULL, ITEM_SPLIT);
-                count++;
             }
             free(n_record);
             n_record = NULL;
@@ -240,7 +240,7 @@ print_record()
 
         } else {
             for (j = 0; j < mod->n_item; j++) {
-                if (*mod->print_item != 0 && (mod->p_item & (1<<j)) == 0) {
+                if (*mod->print_item != 0 && (mod->p_item != j)) {
                     continue;
                 }
                 st_array = &mod->st_array[j * mod->n_col];
@@ -295,6 +295,7 @@ running_print_live()
         /* print current time */
         print_current_time();
         print_record();
+        fflush(stdout);
 
         print_num++;
         /* sleep every interval */
@@ -305,6 +306,7 @@ running_print_live()
 
 
 /* find where start printting
+ * number:the suffix number of record data (tsar.data.number)
  * return
  * 0 ok
  * 1 need find last tsar.data file
@@ -317,11 +319,11 @@ running_print_live()
 int
 find_offset_from_start(FILE *fp, int number)
 {
-    char    line[LEN_40960] = {0};
-    long    fset, fend, file_len, off_start, off_end, offset, line_len;
-    char   *p_sec_token;
-    time_t  now, t_token, t_get;
-    struct  tm stm;
+    long        fset, fend, file_len, off_start, off_end, offset, line_len;
+    char       *p_sec_token;
+    time_t      now, t_token, t_get;
+    struct tm   stm;
+    static char line[LEN_10M] = {0};
 
     /* get file len */
     if (fseek(fp, 0, SEEK_END) != 0 ) {
@@ -338,8 +340,8 @@ find_offset_from_start(FILE *fp, int number)
     }
     file_len = fend - fset;
 
-    memset(&line, 0, LEN_40960);
-    if (!fgets(line, LEN_40960, fp)) {
+    memset(&line, 0, LEN_10M);
+    if (!fgets(line, LEN_10M, fp)) {
         do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
     }
     line_len = strlen(line);
@@ -358,6 +360,7 @@ find_offset_from_start(FILE *fp, int number)
         t_token = mktime(&stm);
         conf.print_day = (now - t_token) / (24 * 60 * 60);
     }
+
     if (conf.print_day >= 0) {
         if (conf.print_day > conf.print_max_day) {
             conf.print_day = conf.print_max_day;
@@ -374,7 +377,14 @@ find_offset_from_start(FILE *fp, int number)
             conf.print_ndays = conf.print_max_day;
         }
         now = now - now % (60 * conf.print_nline_interval);
-        t_token = now - conf.print_ndays * (24 * 60 * 60) - (60 * conf.print_nline_interval);
+        if (conf.running_mode == RUN_WATCH) {
+            if (conf.print_nminute > (conf.print_max_day * 24 * 60)) {
+                conf.print_nminute = conf.print_max_day * 24 * 60;
+            }
+            t_token = now - (60 * conf.print_nminute) - (60 * conf.print_nline_interval);
+        } else {
+            t_token = now - conf.print_ndays * (24 * 60 * 60) - (60 * conf.print_nline_interval);
+        }
         conf.print_start_time = t_token;
         conf.print_end_time = now + (60 * conf.print_nline_interval);
     }
@@ -383,16 +393,16 @@ find_offset_from_start(FILE *fp, int number)
     off_end = file_len;
     while (1) {
         offset = (off_start + off_end) / 2;
-        memset(&line, 0, LEN_40960);
+        memset(&line, 0, LEN_10M);
         if (fseek(fp, offset, SEEK_SET) != 0) {
             do_debug(LOG_FATAL, "fseek error:%s", strerror(errno));
         }
-        if (!fgets(line, LEN_40960, fp)) {
-            do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
+        if (!fgets(line, LEN_10M, fp)) {
+            do_debug(LOG_FATAL, "fgets error: maybe %s has not enough data", conf.output_file_path);
         }
-        memset(&line, 0, LEN_40960);
-        if (!fgets(line, LEN_40960, fp)) {
-            do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
+        memset(&line, 0, LEN_10M);
+        if (!fgets(line, LEN_10M, fp)) {
+            do_debug(LOG_FATAL, "fgets error: maybe %s has not enough data", conf.output_file_path);
         }
         if (0 != line[0] && offset > line_len) {
             p_sec_token = strstr(line, SECTION_SPLIT);
@@ -490,7 +500,9 @@ check_time(const char *line)
 
     /* get record time */
     token = strstr(line, SECTION_SPLIT);
-    memcpy(s_time, line, token - line);
+    if ((token - line) < 32) {
+	    memcpy(s_time, line, token - line);
+    }
     now_time = atol(s_time);
 
     /* check if time is over print_end_time */
@@ -568,7 +580,7 @@ print_tail(int tail_type)
 
         k = 0;
         for (j = 0; j < mod->n_item; j++) {
-            if (*mod->print_item != 0 && (mod->p_item & (1<<j)) == 0) {
+            if (*mod->print_item != 0 && (mod->p_item != j)) {
                 k += mod->n_col;
                 continue;
             }
@@ -611,10 +623,10 @@ print_tail(int tail_type)
 FILE *
 init_running_print()
 {
-    int    i=0, k=0;
-    FILE  *fp, *fptmp;
-    char   line[LEN_40960] = {0};
-    char   filename[LEN_128] = {0};
+    int           i=0, k=0;
+    FILE         *fp, *fptmp;
+    char          filename[LEN_128] = {0};
+    static char   line[LEN_10M] = {0};
 
     /* will print tail*/
     conf.print_tail = 1;
@@ -672,7 +684,7 @@ init_running_print()
         do_debug(LOG_FATAL, "log format error or find_offset_from_start have a bug. error code=%d\n", k);
     }
     /* get record */
-    if (!fgets(line, LEN_40960, fp)) {
+    if (!fgets(line, LEN_10M, fp)) {
         do_debug(LOG_FATAL, "can't get enough log info\n");
     }
 
@@ -696,20 +708,24 @@ init_running_print()
 void
 running_print()
 {
-    int    print_num = 1, re_p_hdr = 0;
-    char   line[LEN_40960] = {0};
-    char   filename[LEN_128] = {0};
-    long   n_record = 0, s_time;
-    FILE  *fp;
+    int           print_num = 1, re_p_hdr = 0;
+    char          filename[LEN_128] = {0};
+    long          n_record = 0, s_time;
+    FILE         *fp;
+    static char   line[LEN_10M] = {0};
 
+    /*find the position of the first record to be printed. (eg: middle of tsar.data.2)*/
     fp = init_running_print();
 
     /* skip first record */
     if (collect_record_stat() == 0) {
         do_debug(LOG_INFO, "collect_record_stat warn\n");
     }
+
+    /*now ,print all printable records*/
+    /*(eg: second half of tsar.data.2, then all of tsar.data.1, then tsar.data)*/
     while (1) {
-        if (!fgets(line, LEN_40960, fp)) {
+        if (!fgets(line, LEN_10M, fp)) {
             if (conf.print_file_number <= 0) {
                 break;
 
@@ -798,17 +814,17 @@ trim(char* src, int max_len)
 void
 running_check(int check_type)
 {
-    int        total_num=0, i, j, k;
-    FILE      *fp;
-    char       line[2][LEN_40960];
-    char       filename[LEN_128] = {0};
-    char       tmp[9][LEN_4096];
-    char       check[LEN_40960] = {0};
-    char       host_name[LEN_64] = {0};
-    struct     module *mod = NULL;
-    struct     stat statbuf;
-    time_t     nowtime;
-    double    *st_array;
+    int               total_num=0, i, j, k;
+    FILE             *fp;
+    char              filename[LEN_128] = {0};
+    char              tmp[10][LEN_4096];
+    char              host_name[LEN_64] = {0};
+    struct            module *mod = NULL;
+    struct            stat statbuf;
+    time_t            nowtime;
+    double           *st_array;
+    static char       line[2][LEN_10M];
+    static char       check[LEN_10M] = {0};
 
     /* get hostname */
     if (0 != gethostname(host_name, sizeof(host_name))) {
@@ -821,7 +837,7 @@ running_check(int check_type)
             break;
         }
     }
-    memset(tmp, 0, 9 * LEN_4096);
+    memset(tmp, 0, 10 * LEN_4096);
     sprintf(check, "%s\ttsar\t", host_name);
     sprintf(filename, "%s", conf.output_file_path);
     fp = fopen(filename, "r");
@@ -831,11 +847,11 @@ running_check(int check_type)
     /* check file update time */
     stat(filename, &statbuf);
     time(&nowtime);
-    if (nowtime - statbuf.st_ctime > 300) {
-        do_debug(LOG_FATAL, "/var/log/tsar.data is far away from now, last time is %s", ctime(&statbuf.st_ctime));
+    if (nowtime - statbuf.st_mtime > 300) {
+        do_debug(LOG_FATAL, "/var/log/tsar.data is far away from now, now time is %d, last time is %d", nowtime, statbuf.st_mtime);
     }
     /* get file len */
-    memset(&line[0], 0, LEN_40960);
+    memset(&line[0], 0, LEN_10M);
     total_num =0;
     /* find two \n from end*/
     if (fseek(fp, -1, SEEK_END) != 0) {
@@ -868,7 +884,7 @@ running_check(int check_type)
             do_debug(LOG_FATAL, "unable to open the log file %s.\n", filename);
         }
         total_num = 0;
-        memset(&line[0], 0, 2 * LEN_40960);
+        memset(&line[0], 0, 2 * LEN_10M);
         /* count tsar.data.1 lines */
         if (fseek(fp, -1, SEEK_END) != 0) {
             do_debug(LOG_FATAL, "fseek error:%s", strerror(errno));
@@ -891,18 +907,18 @@ running_check(int check_type)
             do_debug(LOG_FATAL, "not enough lines at log file %s.\n", filename);
         }
 
-        memset(&line[0], 0, LEN_40960);
-        if (!fgets(line[0], LEN_40960, fp)) {
+        memset(&line[0], 0, LEN_10M);
+        if (!fgets(line[0], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
-        memset(&line[1], 0, LEN_40960);
-        if (!fgets(line[1], LEN_40960, fp)) {
+        memset(&line[1], 0, LEN_10M);
+        if (!fgets(line[1], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
 
     } else if (total_num == 1) {
-        memset(&line[1], 0, LEN_40960);
-        if (!fgets(line[1], LEN_40960, fp)) {
+        memset(&line[1], 0, LEN_10M);
+        if (!fgets(line[1], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
         if (fclose(fp) < 0) {
@@ -937,21 +953,28 @@ running_check(int check_type)
         if (total_num < 1) {
             do_debug(LOG_FATAL, "not enough lines at log file %s\n", filename);
         }
-        memset(&line[0], 0, LEN_40960);
-        if (!fgets(line[0], LEN_40960, fp)) {
+        memset(&line[0], 0, LEN_10M);
+        if (!fgets(line[0], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
 
     } else {
-        memset(&line[0], 0, LEN_40960);
-        if (!fgets(line[0], LEN_40960, fp)) {
+        memset(&line[0], 0, LEN_10M);
+        if (!fgets(line[0], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
-        memset(&line[1], 0, LEN_40960);
-        if (!fgets(line[1], LEN_40960, fp)) {
+        memset(&line[1], 0, LEN_10M);
+        if (!fgets(line[1], LEN_10M, fp)) {
             do_debug(LOG_FATAL, "fgets error:%s", strerror(errno));
         }
     }
+
+    /*as fp is not used after here,close it */
+    if (fclose(fp) < 0) {
+        do_debug(LOG_FATAL, "fclose error:%s", strerror(errno));
+    }
+    fp = NULL;
+
     /* set struct module fields */
     init_module_fields();
 
@@ -1039,10 +1062,6 @@ running_check(int check_type)
             }
         }
         printf("\n");
-        if (fclose(fp) < 0) {
-            do_debug(LOG_FATAL, "fclose error:%s", strerror(errno));
-        }
-        fp = NULL;
         return;
     }
 #ifdef OLDTSAR
@@ -1187,15 +1206,22 @@ running_check(int check_type)
                     }
                 }
             }
+	    if (!strcmp(mod->name, "mod_swap")) {
+	        for (j = 0; j < mod->n_item; j++) {
+                    st_array = &mod->st_array[j * mod->n_col];
+                    if (!st_array || !mod->st_flag) {
+                        sprintf(tmp[9], " swap/total=- swap/util=-");
+
+                    } else {
+                        sprintf(tmp[9], " swap/total=%0.2f swap/util=%0.2f%%", st_array[2] / 1024 / 1024, st_array[3]);
+                    }
+                }
+	    }
         }
-        for (j = 0; j < 9; j++) {
+        for (j = 0; j < 10; j++) {
             strcat(check, tmp[j]);
         }
         printf("%s\n", check);
-        if (fclose(fp) < 0) {
-            do_debug(LOG_FATAL, "fclose error:%s", strerror(errno));
-        }
-        fp = NULL;
     }
 #endif
 }

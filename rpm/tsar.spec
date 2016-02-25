@@ -1,6 +1,6 @@
 Name: tsar
-Version: _VERSION_
-Release: _RELEASE_
+Version: 2.1.1
+Release: 19200.aone
 Summary: Taobao System Activity Reporter
 URL: https://github.com/alibaba/tsar
 Group: Taobao/Common

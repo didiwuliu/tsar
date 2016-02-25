@@ -49,10 +49,17 @@ struct configure {
     int     print_tail;
     int     print_file_number;          /* which tsar.data file used */
     int     print_max_day;              /* max day for history print */
+    int     print_nminute;              /* these minutes for history watch */
 
     /* output db */
     char    output_db_mod[LEN_512];     /* which mod will output */
     char    output_db_addr[LEN_512];    /* db addr */
+
+    /* output tcp */
+    int     output_tcp_addr_num;        /*the number of tcp address indeed need to send data*/
+    char    output_tcp_mod[LEN_512];
+    char    output_tcp_addr[MAX_TCP_ADDR_NUM][LEN_256];
+    char    output_tcp_merge[LEN_256];
 
     /* output nagios */
     char    server_addr[LEN_512];

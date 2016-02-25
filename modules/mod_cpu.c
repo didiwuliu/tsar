@@ -98,7 +98,7 @@ set_cpu_record(struct module *mod, double st_array[],
     U_64   pre_total, cur_total;
     pre_total = cur_total = 0;
 
-    for (i = 0; i < mod->n_col - 1; i++) {
+    for (i = 0; i < 9; i++) {
         if(cur_array[i] < pre_array[i]){
             for(j = 0; j < 9; j++)
                 st_array[j] = -1;
@@ -109,8 +109,12 @@ set_cpu_record(struct module *mod, double st_array[],
     }
 
     /* no tick changes, or tick overflows */
-    if (cur_total <= pre_total)
+    if (cur_total <= pre_total) {
+        for(j = 0; j < 9; j++)
+            st_array[j] = -1;
         return;
+    }
+
     /* set st record */
     for (i = 0; i < 9; i++) {
         /* st_array[5] is util, calculate it late */
@@ -144,5 +148,5 @@ static struct mod_info cpu_info[] = {
 void
 mod_register(struct module *mod)
 {
-    register_mod_fileds(mod, "--cpu", cpu_usage, cpu_info, 10, read_cpu_stats, set_cpu_record);
+    register_mod_fields(mod, "--cpu", cpu_usage, cpu_info, 10, read_cpu_stats, set_cpu_record);
 }

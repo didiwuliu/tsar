@@ -35,11 +35,12 @@
 #define LEN_512     512
 #define LEN_1024    1024
 #define LEN_4096    4096
-#define LEN_10240   10240
-#define LEN_40960   40960
+#define LEN_1M      1048576
+#define LEN_10M     10485760
 
 #define MAX_COL_NUM 64
 #define MAX_MOD_NUM 32
+#define MAX_TCP_ADDR_NUM 4
 
 #define SECTION_SPLIT   "|"
 #define STRING_SPLIT    ":"
@@ -89,10 +90,11 @@ enum {
     RUN_CRON,
 #ifdef OLDTSAR
     RUN_CHECK,
-    RUN_CHECK_NEW,
 #endif
+    RUN_CHECK_NEW,
     RUN_PRINT,
-    RUN_PRINT_LIVE
+    RUN_PRINT_LIVE,
+    RUN_WATCH
 };
 
 
